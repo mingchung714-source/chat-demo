@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>即時聊天室 - 密碼安全穩定版</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9; margin: 0; }
+        .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 900px; margin: 50px auto; }
+        .container { display: flex; height: 400px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }
+        
+        .login-box { max-width: 320px; margin: 100px auto; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+        .login-box input { width: 90%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        .btn-group { display: flex; gap: 10px; justify-content: center; }
+        
+        .sidebar { width: 150px; background: #2f3136; color: #8e9297; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
+        .channel-btn { background: none; border: none; color: #8e9297; text-align: left; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .channel-btn:hover { background: #34373c; color: #dcddde; }
+        .channel-btn.active { background: #393c43; color: white; font-weight: bold; }
+        
+        .chat-area { flex: 1; display: flex; flex-direction: column; padding: 10px; background: #fafafa; }
+        #messages { flex: 1; overflow-y: scroll; padding: 10px; margin-bottom: 10px; background: white; border: 1px solid #eee; }
+        
+        /* 尋找並修改成這樣 */
+        .msg-line { 
+            margin-bottom: 8px; 
+            font-size: 14px; 
+            line-height: 1.4; 
+    
+            /* ➡️ 新增以下兩行：強制長英文字或網址自動折行，不撐破外框 */
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+
+        .msg-time { color: #aaa; font-size: 11px; margin-left: 8px; }
+        .msg-system { color: #2ecc71; font-weight: bold; font-style: italic; }
+        .msg-user { font-weight: bold; color: #333; }
+
+        .online-list { width: 150px; background: #f0f0f5; border-left: 1px solid #ddd; padding: 10px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+        .user-tag { 
+            background: white; 
+            padding: 5px; 
+            border-radius: 4px; 
+            border: 1px solid #e0e0e0; 
+            text-align: center; 
+            font-weight: 500; 
+
+            /* ➡️ 新增以下三行：名字太長時，自動截斷並呈現 "..." */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .input-row { display: flex; gap: 5px; }
+        input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button.send-btn { padding: 8px 15px; border: none; background: #5865F2; color: white; border-radius: 4px; cursor: pointer; }
+        button.send-btn:hover { background: #4752C4; }
+        .reg-btn { background: #2ecc71; }
+        .reg-btn:hover { background: #27ae60; }
+        
+        #chat-screen { display: none; }
+
+        /* ➡️ 在 <style> 的最底下補上這段 */
+        .emoji-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .emoji-picker {
+            display: none; /* 預設隱藏 */
+            position: absolute;
+            bottom: 45px; /* 彈出在按鈕上方 */
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            padding: 10px;
+            grid-template-columns: repeat(5, 30px); /* 一列 5 個 */
+            gap: 5px;
+            z-index: 100;
+        }
+        .emoji-picker.show {
+            display: grid; /* 切換成 grid 網格佈局 */
+        }
+        .emoji-item {
+            font-size: 20px;
+            cursor: pointer;
+            text-align: center;
+            transition: transform 0.1s;
+            user-select: none;
+        }
+        .emoji-item:hover {
+            transform: scale(1.2); /* 滑鼠懸停時微放大 */
+        }
+
+
+    </style>
+</head>
+<body>
+
+    <!-- 🚪 1. 登入/註冊視窗 -->
+    <div id="login-screen" class="login-box">
+        <h2>💬 安全聊天室</h2>
+        <input type="text" id="usernameInput" placeholder="請輸入帳號..." autocomplete="off"/>
+        <input type="password" id="passwordInput" placeholder="請輸入密碼..."/>
+        <div class="btn-group">
+            <button class="send-btn" onclick="handleAuth('login')">登入</button>
+            <button class="send-btn reg-btn" onclick="handleAuth('register')">註冊</button>
+        </div>
+    </div>
+
+    <!-- 💬 2. 核心聊天主畫面 -->
+    <div id="chat-screen" class="box" style="padding: 0;">
+        <div class="container">
+            <div class="sidebar">
+                <div style="color: white; font-weight: bold; margin-bottom: 10px; font-size: 12px;">文字頻道</div>
+                <button class="channel-btn active" id="btn-lobby" onclick="switchChannel('lobby')"># 大廳</button>
+                <button class="channel-btn" id="btn-gaming" onclick="switchChannel('gaming')"># 遊戲專區</button>
+                <button class="channel-btn" id="btn-chat" onclick="switchChannel('chat')"># 閒聊專區</button>
+                <button class="channel-btn" style="margin-top: auto; background: #e74c3c; color: white;" onclick="logout()">登出</button>
+            </div>
+            
+            <div class="chat-area">
+                <h3>目前頻道: <span id="current-channel" style="color: #5865F2;"># lobby</span> (👤 <span id="user-name"></span>)</h3>
+                <div id="messages"></div>
+                <!-- 尋找並修改成下方結構 -->
+            <div class="input-row">
+                <input type="text" id="messageText" autocomplete="off" placeholder="輸入訊息..." onkeydown="if(event.key==='Enter') sendMessage()"/>
+                
+                <div class="emoji-wrapper">
+                    <button class="send-btn" style="background: #f1f2f6; color: #333;" onclick="toggleEmojiPicker()">😀</button>
+                    
+                    <!-- ➡️ 這裡變成空殼，我們給它一個容器 ID 叫做 emoji-container -->
+                    <div id="emoji-container"></div>
+                </div>
+                
+                <button class="send-btn" onclick="sendMessage()">發送</button>
+            </div>
+
+            </div>
+
+            <div class="online-list">
+                <div style="font-weight: bold; color: #555; margin-bottom: 5px; font-size: 12px;">在線成員 (<span id="user-count">0</span>)</div>
+                <div id="user-box" style="display: flex; flex-direction: column; gap: 5px; overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var ws;
+        var userToken = "";
+        var myNickname = "";
+        var currentChannel = "lobby"; 
+
+        // ➡️ 新增：當網頁完全載入後，自動非同步讀取外部的 emoji.html
+        document.addEventListener("DOMContentLoaded", async function() {
+            try {
+                var response = await fetch('emoji.html');
+                if (response.ok) {
+                    var htmlContent = await response.text();
+                    // 把讀取到的 HTML 內容塞進空殼容器中
+                    document.getElementById('emoji-container').innerHTML = htmlContent;
+                }
+            } catch (error) {
+                console.error("無法載入表情包元件:", error);
+            }
+        });
+
+        // ➡️ 修正後的 JavaScript 非同步函式語法
+        async function handleAuth(action) {
+            var uInput = document.getElementById("usernameInput").value.trim();
+            var pInput = document.getElementById("passwordInput").value.trim();
+            if(!uInput || !pInput) { alert("請填寫完整帳密！"); return; }
+
+            try {
+                var response = await fetch(`/${action}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: uInput, password: pInput })
+                });
+                var result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.detail || "操作失敗");
+                    return;
+                }
+
+                if (action === "register") {
+                    alert("註冊成功！請輸入帳密後點擊登入。");
+                } else if (action === "login") {
+                    userToken = result.token;
+                    myNickname = result.username;
+                    
+                    document.getElementById('user-name').textContent = myNickname;
+                    document.getElementById("login-screen").style.display = "none";
+                    document.getElementById("chat-screen").style.display = "block";
+
+                    connectWebSocket(currentChannel);
+                }
+            } catch (error) {
+                alert("連線後端失敗，請確認 FastAPI 是否已成功啟動！");
+            }
+        }
+
+        function connectWebSocket(channel) {
+            if (ws) { ws.close(); }
+
+            document.getElementById('current-channel').textContent = "# " + channel;
+            document.getElementById('messages').innerHTML = ""; 
+            document.getElementById('user-box').innerHTML = ""; 
+
+            ws = new WebSocket(`ws://localhost:8000/ws/${channel}/${userToken}`);
+
+            ws.onmessage = function(event) {
+                var data = JSON.parse(event.data);
+
+                if (data.type === "SYSTEM_ERROR") {
+                    alert(data.content);
+                    logout();
+                    return;
+                }
+
+                if (data.type === "USER_LIST_UPDATE") {
+                    document.getElementById("user-count").textContent = data.count;
+                    var userBox = document.getElementById("user-box");
+                    userBox.innerHTML = "";
+                    data.users.forEach(function(user) {
+                        var tag = document.createElement("div");
+                        tag.className = "user-tag";
+                        tag.textContent = "👤 " + user;
+                        userBox.appendChild(tag);
+                    });
+                    return;
+                }
+
+                // 尋找 if (data.type === "CHAT_MSG") 區塊，置換為以下邏輯：
+                if (data.type === "CHAT_MSG") {
+                    var messages = document.getElementById('messages');
+                    var msgLine = document.createElement('div');
+                    msgLine.className = "msg-line";
+
+                    if (data.is_system) {
+                        // 系統訊息保持綠色斜體樣式
+                        msgLine.innerHTML = `<span class="msg-system">${data.content}</span><span class="msg-time">${data.time}</span>`;
+                    } else {
+                        // 一般聊天訊息：拆解成不同元素
+                        var nameSpan = document.createElement('span');
+                        nameSpan.className = "msg-user";
+                        nameSpan.textContent = `👤 ${data.nickname}: `; // textContent 會自動過濾特殊字元，非常安全
+
+                        var contentSpan = document.createElement('span');
+                        contentSpan.textContent = data.content; // ➡️ 這裡也是用 textContent 確保內容原汁原味呈現，不會觸發 HTML 排版漏洞
+
+                        var timeSpan = document.createElement('span');
+                        timeSpan.className = "msg-time";
+                        timeSpan.textContent = data.time;
+
+                        // 依序組合放進這一行
+                        msgLine.appendChild(nameSpan);
+                        msgLine.appendChild(contentSpan);
+                        msgLine.appendChild(timeSpan);
+                    }
+
+                    messages.appendChild(msgLine);
+                    messages.scrollTop = messages.scrollHeight;
+                }
+
+            };
+        }
+
+        function switchChannel(targetChannel) {
+            if (targetChannel === currentChannel) return; 
+            document.getElementById(`btn-${currentChannel}`).classList.remove('active');
+            document.getElementById(`btn-${targetChannel}`).classList.add('active');
+            currentChannel = targetChannel;
+            connectWebSocket(targetChannel); 
+        }
+
+        function sendMessage() {
+            var input = document.getElementById("messageText");
+            if (input.value.trim() !== "" && ws) {
+                ws.send(input.value);
+                input.value = '';
+            }
+             // ➡️ 新增這一行：送出訊息後自動確保表情包視窗是關閉的
+            document.getElementById("emojiPicker").classList.remove("show");
+        }
+
+        function logout() {
+            if(ws) ws.close();
+            userToken = "";
+            myNickname = "";
+            document.getElementById("login-screen").style.display = "block";
+            document.getElementById("chat-screen").style.display = "none";
+            document.getElementById("passwordInput").value = "";
+        }
+        // ➡️ 在 <script> 最底下新增這兩個函式
+
+        // 1. 控制表情包視窗的顯示或隱藏
+        function toggleEmojiPicker() {
+            var picker = document.getElementById("emojiPicker");
+            if (picker) {
+                picker.classList.toggle("show");
+            }
+        }
+
+        // 2. 將選中的 Emoji 塞進對話輸入框
+        function appendEmoji(emoji) {
+            var input = document.getElementById("messageText");
+            input.value += emoji; // 加上表情符號
+            
+            // 貼心的微優化：保持輸入框的焦點，並自動把視窗關掉
+            input.focus(); 
+            document.getElementById("emojiPicker").classList.remove("show");
+        }
+    </script>
+</body>
+</html>
