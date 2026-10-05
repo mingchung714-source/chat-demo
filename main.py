@@ -17,7 +17,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, select
 app = FastAPI()
 
 # 1. 基礎設定
-DATABASE_URL = "mysql+aiomysql://root:banny723@localhost:3306/chat_db"
+DATABASE_URL = "mysql+aiomysql://root:password@localhost:3306/chat_db"
 SECRET_KEY = "super_secret_chat_key_2026"
 ALGORITHM = "HS256"
 
